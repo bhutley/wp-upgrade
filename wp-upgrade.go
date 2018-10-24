@@ -11,13 +11,13 @@ import (
 )
 
 var (
-	wpDir string
-	siteDir string
+	wpDir                string
+	siteDir              string
 	autoCreateMissingDir bool
 )
 
 type WpFile struct {
-	Name string
+	Name     string
 	FileInfo os.FileInfo
 }
 
@@ -41,17 +41,23 @@ func init() {
 	if wpDir == "" {
 		fmt.Println("The base Wordpress source directory must be specified")
 		hasErrs = true
-	} else if !isValidWordpressDir(wpDir) {
-		fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", wpDir)
-		hasErrs = true
+	} else {
+		wpDir = path.Clean(wpDir)
+		if !isValidWordpressDir(wpDir) {
+			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", wpDir)
+			hasErrs = true
+		}
 	}
 
 	if siteDir == "" {
 		fmt.Println("The site Wordpress installation directory must be specified")
 		hasErrs = true
-	} else if !isValidWordpressDir(siteDir) {
-		fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", siteDir)
-		hasErrs = true
+	} else {
+		siteDir = path.Clean(siteDir)
+		if !isValidWordpressDir(siteDir) {
+			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", siteDir)
+			hasErrs = true
+		}
 	}
 
 	if hasErrs {
