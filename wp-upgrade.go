@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	wpDir                string
-	siteDir              string
+	sourceDir            string
+	destDir              string
+	minPctFilesExist     float64
 	autoCreateMissingDir bool
 )
 
@@ -32,30 +33,31 @@ func isValidWordpressDir(dir string) bool {
 }
 
 func init() {
-	flag.StringVar(&wpDir, "wp-dir", "", "The Wordpress source directory")
-	flag.StringVar(&siteDir, "site-dir", "", "The directory to upgrade")
+	flag.StringVar(&sourceDir, "src-dir", "", "The source directory to copy")
+	flag.StringVar(&destDir, "dest-dir", "", "The directory to upgrade")
+	flag.Float64Var(&minPctFilesExist, "min-pct", 0.60, "The minimum percentage of files that need to exist.")
 	flag.BoolVar(&autoCreateMissingDir, "create-missing-dir", true, "Automatically create directories that are missing")
 	flag.Parse()
 
 	hasErrs := false
-	if wpDir == "" {
-		fmt.Println("The base Wordpress source directory must be specified")
+	if sourceDir == "" {
+		fmt.Println("The base source directory must be specified")
 		hasErrs = true
 	} else {
-		wpDir = path.Clean(wpDir)
-		if !isValidWordpressDir(wpDir) {
-			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", wpDir)
+		sourceDir = path.Clean(sourceDir)
+		if !isValidWordpressDir(sourceDir) {
+			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", sourceDir)
 			hasErrs = true
 		}
 	}
 
-	if siteDir == "" {
+	if destDir == "" {
 		fmt.Println("The site Wordpress installation directory must be specified")
 		hasErrs = true
 	} else {
-		siteDir = path.Clean(siteDir)
-		if !isValidWordpressDir(siteDir) {
-			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", siteDir)
+		destDir = path.Clean(destDir)
+		if !isValidWordpressDir(destDir) {
+			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", destDir)
 			hasErrs = true
 		}
 	}
@@ -68,17 +70,17 @@ func init() {
 
 func main() {
 	// Now traverse through our list of files from the source directory,
-	wpFiles := make([]WpFile, 0)
+	srcFiles := make([]WpFile, 0)
 	pathMap := make(map[string]WpFile)
 
-	filepath.Walk(wpDir, func(filePath string, fileInfo os.FileInfo, err error) error {
+	filepath.Walk(sourceDir, func(filePath string, fileInfo os.FileInfo, err error) error {
 		if err != nil {
 			panic(err)
 		}
 
-		// strip the wpDir prefix from the path
-		if len(filePath) > len(wpDir) {
-			abbrPath := filePath[len(wpDir)+1:]
+		// strip the sourceDir prefix from the path
+		if len(filePath) > len(sourceDir) {
+			abbrPath := filePath[len(sourceDir)+1:]
 
 			if abbrPath[0:1] == "." {
 				return nil // ignore files that start with a dot
@@ -88,7 +90,7 @@ func main() {
 				Name:     abbrPath,
 				FileInfo: fileInfo,
 			}
-			wpFiles = append(wpFiles, wpFile)
+			srcFiles = append(srcFiles, wpFile)
 			pathMap[abbrPath] = wpFile
 		}
 
@@ -98,10 +100,12 @@ func main() {
 	// now check to see if all the directories exist in the dest path
 	pathErrs := false
 	lastMissingPath := ""
-	for _, wpFile := range wpFiles {
-		if wpFile.FileInfo.IsDir() {
-			if lastMissingPath == "" || !strings.HasPrefix(wpFile.Name, lastMissingPath) {
-				destDir := path.Join(siteDir, wpFile.Name)
+	numFilesExisting := 0.0
+	numFilesInTotal := 0.0
+	for _, srcFile := range srcFiles {
+		if srcFile.FileInfo.IsDir() {
+			if lastMissingPath == "" || !strings.HasPrefix(srcFile.Name, lastMissingPath) {
+				destDir := path.Join(destDir, srcFile.Name)
 				if _, err := os.Stat(destDir); os.IsNotExist(err) {
 					fmt.Printf("Destination directory %s does not exist!\n", destDir)
 					if autoCreateMissingDir {
@@ -110,10 +114,16 @@ func main() {
 							panic(err)
 						}
 					} else {
-						lastMissingPath = wpFile.Name
+						lastMissingPath = srcFile.Name
 						pathErrs = true
 					}
 				}
+			}
+		} else {
+			numFilesInTotal += 1.0
+			destDir := path.Join(destDir, srcFile.Name)
+			if _, err := os.Stat(destDir); os.IsExist(err) {
+				numFilesExisting += 1.0
 			}
 		}
 	}
@@ -123,10 +133,21 @@ func main() {
 		os.Exit(2)
 	}
 
-	for _, wpFile := range wpFiles {
+	if numFilesInTotal == 0.0 {
+		fmt.Println("Number of files in source directory is zero")
+		os.Exit(3)
+	}
+
+	pctFilesExist := numFilesExisting / numFilesInTotal
+	if pctFilesExist < minPctFilesExist {
+		fmt.Printf("Percentage of files that exist in dest directory %.2f%% is less than minimum %.2f%%\n", pctFilesExist*100.0, minPctFilesExist*100.0)
+		os.Exit(4)
+	}
+
+	for _, wpFile := range srcFiles {
 		if !wpFile.FileInfo.IsDir() {
-			sourceFile := path.Join(wpDir, wpFile.Name)
-			destFile := path.Join(siteDir, wpFile.Name)
+			sourceFile := path.Join(sourceDir, wpFile.Name)
+			destFile := path.Join(destDir, wpFile.Name)
 
 			input, err := ioutil.ReadFile(sourceFile)
 			if err != nil {
