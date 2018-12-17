@@ -128,7 +128,7 @@ func main() {
 		} else {
 			numFilesInTotal += 1.0
 			destDir := path.Join(destDir, srcFile.Name)
-			if _, err := os.Stat(destDir); os.IsExist(err) {
+			if _, err := os.Stat(destDir); err != nil {
 				numFilesExisting += 1.0
 			}
 		}
