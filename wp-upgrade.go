@@ -22,17 +22,23 @@ type WpFile struct {
 	FileInfo os.FileInfo
 }
 
-func isValidWordpressDir(dir string) bool {
-	// Here we just check to see if we have a wp-activate.php file
+func hasRequiredFiles(requiredFiles string, dir string) bool {
+	fileList := strings.Split(requiredFiles, ",")
 	validDir := true
-	wpActivatePath := path.Join(dir, "wp-activate.php")
-	if _, err := os.Stat(wpActivatePath); os.IsNotExist(err) {
-		validDir = false
+	for _, requiredFile := range fileList {
+		requiredFilePath := path.Join(dir, requiredFile)
+		if _, err := os.Stat(requiredFilePath); os.IsNotExist(err) {
+			validDir = false
+			break
+		}
 	}
+
 	return validDir
 }
 
 func init() {
+	var requiredFiles string
+	flag.StringVar(&requiredFiles, "required-files", "", "comma-separated list of required files")
 	flag.StringVar(&sourceDir, "src-dir", "", "The source directory to copy")
 	flag.StringVar(&destDir, "dest-dir", "", "The directory to upgrade")
 	flag.Float64Var(&minPctFilesExist, "min-pct", 0.60, "The minimum percentage of files that need to exist.")
@@ -45,19 +51,19 @@ func init() {
 		hasErrs = true
 	} else {
 		sourceDir = path.Clean(sourceDir)
-		if !isValidWordpressDir(sourceDir) {
-			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", sourceDir)
+		if requiredFiles != "" && !hasRequiredFiles(requiredFiles, sourceDir) {
+			fmt.Printf("The base source directory %s does not appear to be valid (missing required files).\n", sourceDir)
 			hasErrs = true
 		}
 	}
 
 	if destDir == "" {
-		fmt.Println("The site Wordpress installation directory must be specified")
+		fmt.Println("The destination installation directory must be specified")
 		hasErrs = true
 	} else {
 		destDir = path.Clean(destDir)
-		if !isValidWordpressDir(destDir) {
-			fmt.Printf("The base Wordpress source directory %s does not appear to be valid.\n", destDir)
+		if requiredFiles != "" && !hasRequiredFiles(requiredFiles, destDir) {
+			fmt.Printf("The destination directory %s does not appear to be valid (missing required files).\n", destDir)
 			hasErrs = true
 		}
 	}
